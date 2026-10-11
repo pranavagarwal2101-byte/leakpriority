@@ -19,9 +19,9 @@ The prototype is intended for municipal water departments, utility teams, housin
 
 ### Tested locally
 
-- `npm test`: 26 tests passed, 0 failed.
+- The test suite in the public repository: 19 tests passed, 0 failed in the last observed run.
 - `npm run build`: production build completed successfully.
-- `npm run lint`: completed with four unused-variable warnings.
+- `npm run lint`: completed with six unused-variable warnings in the last observed run.
 
 These are local checks, not evidence of a live AWS deployment. The current frontend uses browser `localStorage` because `VITE_API_URL` is blank. The AWS SAM template and backend code are present, but **the AWS backend has not been deployed or verified**, and there is no live API endpoint.
 
@@ -148,15 +148,15 @@ The available package scripts are `dev`, `build`, `lint`, `test`, and `preview`.
 
 ## AWS deployment status and future deployment
 
-The repository includes an AWS SAM template for:
+The repository includes AWS SAM infrastructure and Lambda handlers for:
 
 - **API Gateway REST API** — receives report and statistics requests.
-- **AWS Lambda** — validates requests, handles report operations, and computes scores and dashboard statistics.
+- **AWS Lambda** — handles report operations and computes scores and dashboard statistics.
 - **Amazon DynamoDB** — stores report records and repair status with on-demand billing.
 
-The template configures a single allowed browser origin (default `http://localhost:5173`) and grants Lambda functions only the DynamoDB actions they need. It does not configure authentication; anyone who can reach a deployed API endpoint could use its report operations. Do not use real or sensitive data until access control is added.
+The checked-in template currently allows requests from any browser origin (`AllowOrigin: '*'`) and does not configure authentication; anyone who can reach a deployed API endpoint could use its report operations. Its status-update Lambda has table-scoped DynamoDB CRUD permissions. Before deployment, restrict CORS to the intended frontend origin, review and narrow IAM permissions, and add authentication and authorization. Do not use real or sensitive data until access control is in place.
 
-**The following deployment commands are unverified and have not been run.** AWS CLI and AWS SAM CLI were unavailable in the development environment, and AWS account access could not be checked. Deployment requires an AWS account, appropriate permissions, AWS CLI, and AWS SAM CLI. Review the template, account, region, expected costs, and retention behavior before deploying. AWS API Gateway requests, Lambda usage, DynamoDB reads/writes/storage, and logs may incur charges. The DynamoDB table is configured to be retained if the stack is deleted, so it may require separate cleanup.
+**The following deployment commands are unverified and have not been run.** AWS CLI and AWS SAM CLI were unavailable in the development environment, and AWS account access could not be checked. Deployment requires an AWS account, appropriate permissions, AWS CLI, and AWS SAM CLI. The checked-in template specifies Lambda `nodejs18.x`; confirm the runtime is supported for new deployments and update it if required. Review the template, account, region, CORS, permissions, expected costs, and retention behavior before deploying. AWS API Gateway requests, Lambda usage, DynamoDB reads/writes/storage, and logs may incur charges. The DynamoDB table is configured to be retained if the stack is deleted, so it may require separate cleanup.
 
 For example, after installing the AWS CLI and SAM CLI, configure an IAM Identity Center profile and build/deploy from the repository root in Windows PowerShell:
 
@@ -177,7 +177,7 @@ Never place AWS access keys, session tokens, or other credentials in Vite enviro
 
 ## Testing and validation
 
-The project test script checks scoring behavior and bounds, daily-loss and resolved-savings formulas, frontend/backend scoring parity, backend request validation and CORS defaults, and the frontend repair-status workflow definitions.
+The checked-in test script checks scoring behavior and bounds, daily-loss and resolved-savings formulas, frontend/backend score and category parity, and the frontend repair-status workflow definitions. It does not test live AWS services.
 
 Run:
 
@@ -195,7 +195,7 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-The latest observed local run reported **26 tests passed, 0 failed**, a successful production build, and a completed lint run with four unused-variable warnings. These checks do not exercise deployed Lambda functions, API Gateway, or DynamoDB.
+The last observed run of the public repository's test suite reported **19 tests passed, 0 failed**. The production build succeeded, and lint completed with six unused-variable warnings. These local checks do not exercise deployed Lambda functions, API Gateway, or DynamoDB.
 
 For a manual local smoke test, start the frontend and confirm the Local demo mode label; create a report, inspect its score breakdown, change its repair status, refresh the page, and confirm that the change persists in the same browser. Try the table's score sorting and filters, dashboard metrics, analytics view, and CSV export. A future live AWS test should repeat these checks with the API configured and verify that creating/updating a report persists in DynamoDB across refreshes. That cloud test has not been performed.
 
@@ -203,6 +203,7 @@ For a manual local smoke test, start the frontend and confirm the Local demo mod
 
 - Deploy the SAM stack and verify the API, Lambda handlers, CORS, and DynamoDB persistence end to end.
 - Add authentication and authorization before any non-demo use.
+- Restrict the checked-in wildcard CORS setting and review the status handler's DynamoDB permissions before deployment.
 - Add automated tests for API handler behavior against a local or isolated test database.
 - Review decimal category-boundary behavior in the scoring model.
 - Add optional leak-photo uploads if the workflow requires them.
