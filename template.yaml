@@ -1,0 +1,162 @@
+# LeakPriority — AWS Backend (Lambda + DynamoDB)
+# This SAM template defines the serverless backend for LeakPriority.
+# Deploy with: sam build && sam deploy --guided
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  LeakPriority — Water Leak Prioritization and Repair Management System.
+  Hackathon project for the Heat and Water track.
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref LeakReportsTable
+        STAGE: !Ref Stage
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,Authorization'"
+      AllowOrigin: "'*'"
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+
+Resources:
+  # ─── DynamoDB Table ──────────────────────────────────────────────────────────
+  LeakReportsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'LeakReports-${Stage}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: priorityScore
+          AttributeType: N
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: StatusPriorityIndex
+          KeySchema:
+            - AttributeName: status
+              KeyType: HASH
+            - AttributeName: priorityScore
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: LeakPriority
+
+  # ─── Lambda Functions ─────────────────────────────────────────────────────────
+  ListReportsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'LeakPriority-ListReports-${Stage}'
+      CodeUri: backend/functions/
+      Handler: listReports.handler
+      Description: Returns all leak reports sorted by priority score (desc)
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref LeakReportsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /reports
+            Method: GET
+
+  GetReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'LeakPriority-GetReport-${Stage}'
+      CodeUri: backend/functions/
+      Handler: getReport.handler
+      Description: Returns a single leak report by ID
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref LeakReportsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /reports/{id}
+            Method: GET
+
+  CreateReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'LeakPriority-CreateReport-${Stage}'
+      CodeUri: backend/functions/
+      Handler: createReport.handler
+      Description: Validates and creates a new leak report, calculating its priority score
+      Policies:
+        - DynamoDBWritePolicy:
+            TableName: !Ref LeakReportsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /reports
+            Method: POST
+
+  UpdateStatusFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'LeakPriority-UpdateStatus-${Stage}'
+      CodeUri: backend/functions/
+      Handler: updateStatus.handler
+      Description: Updates the repair status of a leak report
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LeakReportsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /reports/{id}/status
+            Method: PUT
+
+  GetStatsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'LeakPriority-GetStats-${Stage}'
+      CodeUri: backend/functions/
+      Handler: getStats.handler
+      Description: Returns dashboard aggregate statistics
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref LeakReportsTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /stats
+            Method: GET
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
+    Export:
+      Name: !Sub 'LeakPriority-ApiUrl-${Stage}'
+
+  TableName:
+    Description: DynamoDB table name
+    Value: !Ref LeakReportsTable
+    Export:
+      Name: !Sub 'LeakPriority-TableName-${Stage}'
